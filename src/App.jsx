@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Container } from 'react-bootstrap';
+import { Container, Toast, ToastContainer } from 'react-bootstrap';
 import InputField from './components/InputField/InputField';
 import AddButton from './components/AddButton/AddButton';
 import DeleteButton from './components/DeleteButton/DeleteButton';
 import DeleteTaskButton from './components/DeleteTask/DeleteTaskButton';
 import { db } from './firebase';
-import { doc, setDoc, getDoc, updateDoc, getDocs, collection } from "firebase/firestore";
+import { doc, setDoc, getDoc, updateDoc, getDocs, collection, deleteDoc } from "firebase/firestore";
 import './App.css'
 
 function App() {
@@ -13,11 +13,19 @@ function App() {
   const [docSnap, setDocSnap] = useState();
   const [singleValue, setSingleValue] = useState("");
   const [tasks, setTasks] = useState([]);
+  const [EditScreen, setEditScreen] = useState(false)
+  const [KeyValue, setKeyValue] = useState()
+  const [DisableBtn, setDisableBtn] = useState(false);
+  const [loading, setLoading] = useState(true);
+  
+  // Toast states
+  const [showToast, setShowToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState("");
+  const [toastVariant, setToastVariant] = useState("warning");
 
   useEffect(() => {
     getID();
-    console.log("DocSnap:", docSnap);
-  }, [docSnap]);
+  }, [docSnap, KeyValue, loading]);
 
 
   const getID = async () => {
@@ -52,82 +60,100 @@ function App() {
 
   const HandlerAdd = async () => {
     if (singleValue === "") {
-      alert("Please enter a task");
+      setToastMessage("Please enter a task");
+      setToastVariant("warning");
+      setShowToast(true);
       return;
     }
 
-    const newId = docSnap + 1; // Calculate new ID first
+    const newId = docSnap + 1;
     
     try {
-      // Update the ID counter in Firebase
       await updateDoc(doc(db, 'ID number', '3XaM5nlqyBMjTd1Bak2M'), {
-        ID: newId // Use the calculated new ID
+        ID: newId
       });
       
-      // Add the new task with the new ID
       await setDoc(doc(db, 'Data', `${newId}`), { 
         "id": newId, 
         "data": singleValue 
       });
       
-      // Update local state last
       setDocSnap(newId);
       setSingleValue("");
       
+      // Success toast
+      setToastMessage("Task added successfully!");
+      setToastVariant("success");
+      setShowToast(true);
+      
     } catch (error) {
       console.error("Error adding task:", error);
+      setToastMessage("Error adding task. Please try again.");
+      setToastVariant("danger");
+      setShowToast(true);
     }
   };
 
   const HandlerDelete = () => {
-    setTasks([])
-    setSingleValue("");
+    setToastMessage("Deleting All the tasks is not recommended. Please delete tasks individually.");
+    setToastVariant("warning");
+    setShowToast(true);
   }
 
-
-  const DeleteTask = (key) => {
-    let NewArr = tasks.filter((e, i) => i !== key)
-    setTasks(NewArr);
-    setSingleValue("");
-  }
-
-  const [EditScreen, setEditScreen] = useState(false)
-  const [KeyValue, setKeyValue] = useState()
-  const [DisableBtn, setDisableBtn] = useState(false);
+  const DeleteTask = async (key) => {
+    try {
+      await deleteDoc(doc(db, 'Data', `${key}`));
+      setSingleValue("");
+      setLoading(!loading);
+      
+      // Success toast
+      setToastMessage("Task deleted successfully!");
+      setToastVariant("success");
+      setShowToast(true);
+      
+    } catch (error) {
+      console.error("Error deleting task:", error);
+      setToastMessage("Error deleting task. Please try again.");
+      setToastVariant("danger");
+      setShowToast(true);
+    }
+  };
 
   const EditTask = (key) => {
     setKeyValue(key)
     setEditScreen(true);
     setDisableBtn(true);
-    console.log("KeyValue:", key);
     setSingleValue(tasks[key-1].data);
     
   }
 
-  const updateDocData = async (key) => {
+  const UpdatedValue = async () => {
     try {
-      await updateDoc(doc(db, 'Data', `${key}`), {
+      await updateDoc(doc(db, 'Data', `${KeyValue}`), {
         data: singleValue
       });
-      UpdatedValue();
-
+      
+      setEditScreen(false);
+      setDisableBtn(false); 
+      setSingleValue("");
+      setKeyValue(undefined);
+      
+      // Success toast
+      setToastMessage("Task updated successfully!");
+      setToastVariant("success");
+      setShowToast(true);
+      
     } catch (error) {
       console.error("Error updating document:", error);
-      alert("Failed to update task. Please try again.");
+      setToastMessage("Failed to update task. Please try again.");
+      setToastVariant("danger");
+      setShowToast(true);
+      
       setDisableBtn(false);
       setEditScreen(false);
       setSingleValue("");
-      setKeyValue(undefined);     
+      setKeyValue(undefined);
     }
-  }
-
-  const UpdatedValue = () => {
-    const updatedTasks = tasks.map((e, i) => i === KeyValue ? singleValue : e);
-    setTasks(updatedTasks);
-    setDisableBtn(false);
-    setEditScreen(false);
-    setSingleValue("");
-    setKeyValue(undefined);
   }
 
   const CancelEdit = () => {
@@ -155,20 +181,37 @@ function App() {
         <div className='mt-4'>
           {tasks.map((e, i) => {
             return (
-
               <div className='d-flex justify-content-center align-items-center bg-color my-1' key={i}>
                 <div className='h-100 px-3 py-2 m-2 border_setting'>Task {e.id}</div>
                 <div className='version px-3 py-2 m-2 border_setting'>{e.data}</div>
                 <div><button onClick={() => { EditTask(e.id) }} disabled={DisableBtn} className='btn btn-primary ms-2 '>Edit</button></div>
                 <div><DeleteTaskButton value={() => { DeleteTask(e.id) }} /></div>
-
               </div>
             )
           })}
         </div>
-
-
       </Container>
+
+      {/* Toast Container */}
+      <ToastContainer position="top-end" className="p-3" style={{ zIndex: 1050 }}>
+        <Toast 
+          show={showToast} 
+          onClose={() => setShowToast(false)} 
+          delay={4000} 
+          autohide
+          bg={toastVariant}
+        >
+          <Toast.Header>
+            <strong className="me-auto">
+              {toastVariant === "success" ? "Success" : 
+               toastVariant === "danger" ? "Error" : "Warning"}
+            </strong>
+          </Toast.Header>
+          <Toast.Body className={toastVariant === "success" || toastVariant === "danger" ? "text-white" : ""}>
+            {toastMessage}
+          </Toast.Body>
+        </Toast>
+      </ToastContainer>
     </>
   )
 }
