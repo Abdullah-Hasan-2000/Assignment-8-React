@@ -1,0 +1,14 @@
+.version {
+    width:70%
+}
+
+.bg-color {
+    background-color: rgb(226 225 225);
+    border-radius: 5px;
+    font-weight: bold;
+}
+
+.border_setting {
+    border: 1px solid black !important;
+    border-radius: 5px;
+}
