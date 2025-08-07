@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Container, Toast, ToastContainer } from 'react-bootstrap';
+import { Container, Toast, ToastContainer, Spinner } from 'react-bootstrap';
 import InputField from './components/InputField/InputField';
 import AddButton from './components/AddButton/AddButton';
 import DeleteButton from './components/DeleteButton/DeleteButton';
@@ -18,6 +18,12 @@ function App() {
   const [DisableBtn, setDisableBtn] = useState(false);
   const [loading, setLoading] = useState(true);
   
+  // Loading states for async operations
+  const [isAdding, setIsAdding] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [deletingTaskId, setDeletingTaskId] = useState(null);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+  
   // Toast states
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState("");
@@ -27,18 +33,16 @@ function App() {
     getID();
   }, [docSnap, KeyValue, loading]);
 
-
   const getID = async () => {
     try {
       const docRef = doc(db, 'ID number', '3XaM5nlqyBMjTd1Bak2M');
-    const docSnap = await getDoc(docRef);
+      const docSnap = await getDoc(docRef);
 
-    if (docSnap.exists()) {
-      setDocSnap(docSnap.data().ID);
-    } else {
-      // docSnap.data() will be undefined in this case
-      console.log("No such document!");
-    }
+      if (docSnap.exists()) {
+        setDocSnap(docSnap.data().ID);
+      } else {
+        console.log("No such document!");
+      }
     } catch (error) {
       console.error("Error getting document:", error);
     }
@@ -51,11 +55,12 @@ function App() {
         data.push(doc.data());
       });
       setTasks(data);
+      setIsInitialLoading(false); // Set initial loading to false after first load
 
     } catch (error) {
       console.error("Error fetching ID:", error);
+      setIsInitialLoading(false);
     }
-
   };
 
   const HandlerAdd = async () => {
@@ -66,6 +71,7 @@ function App() {
       return;
     }
 
+    setIsAdding(true); // Start loading
     const newId = docSnap + 1;
     
     try {
@@ -91,6 +97,8 @@ function App() {
       setToastMessage("Error adding task. Please try again.");
       setToastVariant("danger");
       setShowToast(true);
+    } finally {
+      setIsAdding(false); // End loading
     }
   };
 
@@ -101,6 +109,8 @@ function App() {
   }
 
   const DeleteTask = async (key) => {
+    setDeletingTaskId(key); // Set which task is being deleted
+    
     try {
       await deleteDoc(doc(db, 'Data', `${key}`));
       setSingleValue("");
@@ -116,6 +126,8 @@ function App() {
       setToastMessage("Error deleting task. Please try again.");
       setToastVariant("danger");
       setShowToast(true);
+    } finally {
+      setDeletingTaskId(null); // Reset deleting state
     }
   };
 
@@ -124,10 +136,11 @@ function App() {
     setEditScreen(true);
     setDisableBtn(true);
     setSingleValue(tasks[key-1].data);
-    
   }
 
   const UpdatedValue = async () => {
+    setIsUpdating(true); // Start loading
+    
     try {
       await updateDoc(doc(db, 'Data', `${KeyValue}`), {
         data: singleValue
@@ -153,6 +166,8 @@ function App() {
       setEditScreen(false);
       setSingleValue("");
       setKeyValue(undefined);
+    } finally {
+      setIsUpdating(false); // End loading
     }
   }
 
@@ -163,6 +178,20 @@ function App() {
     setKeyValue(undefined);
   }
 
+  // Show loading spinner during initial load
+  if (isInitialLoading) {
+    return (
+      <Container className="d-flex justify-content-center align-items-center" style={{minHeight: '100vh'}}>
+        <div className="text-center">
+          <Spinner animation="border" role="status" style={{width: '3rem', height: '3rem'}}>
+            <span className="visually-hidden">Loading...</span>
+          </Spinner>
+          <h4 className="mt-3">Loading Todo Application...</h4>
+        </div>
+      </Container>
+    );
+  }
+
   return (
     <>
       <Container>
@@ -170,22 +199,99 @@ function App() {
         <div className='d-flex justify-content-center align-items-center mt-5'>
           <InputField value={(e) => { setSingleValue(e.target.value) }} remover={singleValue} />
           {EditScreen === true ? <>
-            <button onClick={UpdatedValue} className='btn btn-primary ms-2'>Confirm</button>
-            <button onClick={CancelEdit} className='btn btn-danger ms-2'>Cancel</button>
+            <button 
+              onClick={UpdatedValue} 
+              disabled={isUpdating}
+              className='btn btn-primary ms-2'
+            >
+              {isUpdating ? (
+                <>
+                  <Spinner
+                    as="span"
+                    animation="border"
+                    size="sm"
+                    role="status"
+                    aria-hidden="true"
+                    className="me-2"
+                  />
+                  Updating...
+                </>
+              ) : (
+                'Confirm'
+              )}
+            </button>
+            <button 
+              onClick={CancelEdit} 
+              disabled={isUpdating}
+              className='btn btn-danger ms-2'
+            >
+              Cancel
+            </button>
           </> : <>
-            <AddButton value={HandlerAdd} />
+            <button style={{width: '120px'}} 
+              onClick={HandlerAdd}
+              disabled={isAdding}
+              className='btn btn-success ms-2'
+            >
+              {isAdding ? (
+                <>
+                  <Spinner
+                    as="span"
+                    animation="border"
+                    size="sm"
+                    role="status"
+                    aria-hidden="true"
+                    className="me-2"
+                  />
+                  Adding...
+                </>
+              ) : (
+                'Add Task'
+              )}
+            </button>
             <DeleteButton value={HandlerDelete} />
           </>}
         </div>
 
         <div className='mt-4'>
           {tasks.map((e, i) => {
+            const isDeleting = deletingTaskId === e.id;
             return (
               <div className='d-flex justify-content-center align-items-center bg-color my-1' key={i}>
                 <div className='h-100 px-3 py-2 m-2 border_setting'>Task {e.id}</div>
                 <div className='version px-3 py-2 m-2 border_setting'>{e.data}</div>
-                <div><button onClick={() => { EditTask(e.id) }} disabled={DisableBtn} className='btn btn-primary ms-2 '>Edit</button></div>
-                <div><DeleteTaskButton value={() => { DeleteTask(e.id) }} /></div>
+                <div>
+                  <button 
+                    onClick={() => { EditTask(e.id) }} 
+                    disabled={DisableBtn || isDeleting || isAdding || isUpdating} 
+                    className='btn btn-primary ms-2'
+                  >
+                    Edit
+                  </button>
+                </div>
+                <div>
+                  <button 
+                    onClick={() => { DeleteTask(e.id) }}
+                    disabled={isDeleting || isAdding || isUpdating}
+                    className='btn btn-danger ms-2'
+                  >
+                    {isDeleting ? (
+                      <>
+                        <Spinner
+                          as="span"
+                          animation="border"
+                          size="sm"
+                          role="status"
+                          aria-hidden="true"
+                          className="me-2"
+                        />
+                        Deleting...
+                      </>
+                    ) : (
+                      'Delete'
+                    )}
+                  </button>
+                </div>
               </div>
             )
           })}
